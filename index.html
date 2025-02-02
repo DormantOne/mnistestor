@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Draw a Digit (Model Comparison)</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <style>
+        body { 
+            display: flex; 
+            justify-content: center; 
+            font-family: Arial;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        canvas {
+            border: 2px solid #333;
+            margin: 10px;
+            cursor: crosshair;
+            background-color: black;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        select {
+            padding: 10px;
+            font-size: 16px;
+            margin: 10px;
+            border-radius: 5px;
+        }
+        #result {
+            margin-top: 20px;
+            font-size: 20px;
+            min-height: 36px;
+        }
+        .status {
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .preview-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+        .preview-label {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Draw a Digit (0-9)</h2>
+        <div>
+            <select id="modelSelect">
+                <option value="goodmodel">Good Model</option>
+                <option value="badmodel">Bad Model</option>
+            </select>
+        </div>
+        <div class="preview-container">
+            <div>
+                <canvas id="drawCanvas" width="280" height="280"></canvas>
+                <div class="preview-label">Drawing Area</div>
+            </div>
+            <div>
+                <canvas id="smallCanvas" width="28" height="28"></canvas>
+                <div class="preview-label">MNIST Format</div>
+            </div>
+        </div>
+        <div>
+            <button onclick="clearCanvas()">Clear</button>
+            <button onclick="predict()">Predict</button>
+        </div>
+        <div id="result"></div>
+        <div class="status" id="status"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('drawCanvas');
+        const ctx = canvas.getContext('2d');
+        const smallCanvas = document.getElementById('smallCanvas');
+        const smallCtx = smallCanvas.getContext('2d');
+        const status = document.getElementById('status');
+        let models = {};
+
+        // Load models from the SAME directory as index.html
+        async function loadModels() {
+            status.textContent = "Loading models...";
+            try {
+                models['goodmodel'] = await tf.loadLayersModel('goodmodel.json');
+                models['badmodel'] = await tf.loadLayersModel('badmodel.json');
+                status.textContent = "Models loaded successfully!";
+            } catch (error) {
+                console.error("Error loading models:", error);
+                status.textContent = "Error loading models. Check filenames.";
+            }
+        }
+
+        // Drawing functions
+        function draw(e) {
+            if (!isDrawing) return;
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(e.offsetX, e.offsetY);
+            ctx.stroke();
+            [lastX, lastY] = [e.offsetX, e.offsetY];
+            updateSmallCanvas();
+        }
+
+        function updateSmallCanvas() {
+            smallCtx.fillStyle = 'black';
+            smallCtx.fillRect(0, 0, 28, 28);
+            smallCtx.drawImage(canvas, 0, 0, 280, 280, 0, 0, 28, 28);
+        }
+
+        // Event listeners
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDrawing = true;
+            [lastX, lastY] = [e.offsetX, e.offsetY];
+        });
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', () => isDrawing = false);
+        canvas.addEventListener('mouseout', () => isDrawing = false);
+
+        // Clear canvas
+        function clearCanvas() {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            smallCtx.fillStyle = 'black';
+            smallCtx.fillRect(0, 0, 28, 28);
+            document.getElementById('result').textContent = '';
+            status.textContent = '';
+        }
+
+        // Predict function
+        async function predict() {
+            const modelSelect = document.getElementById('modelSelect');
+            const selectedModel = modelSelect.value;
+
+            try {
+                status.textContent = `Using ${selectedModel} model for prediction...`;
+
+                // Get image data from small canvas
+                const imageData = smallCtx.getImageData(0, 0, 28, 28);
+                let pixels = [];
+
+                // Convert to grayscale array and normalize
+                for (let i = 0; i < imageData.data.length; i += 4) {
+                    pixels.push(imageData.data[i] / 255);
+                }
+
+                // Convert to TensorFlow.js tensor
+                let inputTensor = tf.tensor4d(pixels, [1, 28, 28, 1]);
+
+                // Run prediction
+                let prediction = models[selectedModel].predict(inputTensor);
+                let predictionData = await prediction.data();
+                let digit = predictionData.indexOf(Math.max(...predictionData));
+                let confidence = Math.max(...predictionData);
+
+                // Display result
+                document.getElementById('result').textContent =
+                    `Prediction: ${digit} (${(confidence * 100).toFixed(2)}% confidence)`;
+                status.textContent = 'Prediction complete';
+
+                // Cleanup tensors to avoid memory leaks
+                tf.dispose([inputTensor, prediction]);
+
+            } catch (error) {
+                console.error('Error:', error);
+                status.textContent = 'Error: Ensure models are loaded properly.';
+            }
+        }
+
+        // Initialize
+        clearCanvas();
+        loadModels();
+    </script>
+</body>
+</html>
