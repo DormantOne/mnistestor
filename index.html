@@ -101,16 +101,23 @@
         const status = document.getElementById('status');
         let models = {};
 
-        // Load models from the SAME directory as index.html
+        // Load models from hosted URLs
         async function loadModels() {
             status.textContent = "Loading models...";
             try {
-                models['goodmodel'] = await tf.loadLayersModel('goodmodel.json');
-                models['badmodel'] = await tf.loadLayersModel('badmodel.json');
+                const baseUrl = 'https://dormantone.github.io/mnistestor/';
+                models['goodmodel'] = await tf.loadLayersModel(baseUrl + 'goodmodel.json');
+                models['badmodel'] = await tf.loadLayersModel(baseUrl + 'badmodel.json');
                 status.textContent = "Models loaded successfully!";
             } catch (error) {
                 console.error("Error loading models:", error);
-                status.textContent = "Error loading models. Check filenames.";
+                status.textContent = "Error loading models: " + error.message;
+                
+                // Additional error details in console
+                if (error.response) {
+                    console.error("Response status:", error.response.status);
+                    console.error("Response headers:", error.response.headers);
+                }
             }
         }
 
@@ -159,6 +166,11 @@
             const modelSelect = document.getElementById('modelSelect');
             const selectedModel = modelSelect.value;
 
+            if (!models[selectedModel]) {
+                status.textContent = 'Error: Model not loaded. Please wait for models to load and try again.';
+                return;
+            }
+
             try {
                 status.textContent = `Using ${selectedModel} model for prediction...`;
 
@@ -190,9 +202,15 @@
 
             } catch (error) {
                 console.error('Error:', error);
-                status.textContent = 'Error: Ensure models are loaded properly.';
+                status.textContent = 'Error during prediction: ' + error.message;
             }
         }
+
+        // Initialize drawing settings
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 15;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
 
         // Initialize
         clearCanvas();
